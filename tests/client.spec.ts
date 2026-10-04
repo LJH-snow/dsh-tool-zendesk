@@ -74,6 +74,13 @@ describe('ZendeskClient', () => {
     expect((await pd.listTicketFields()).items[0]).toMatchObject({ id: 4, title: 'Environment', options: 'Prod=prod' })
   })
 
+  it('updates custom fields with the Zendesk custom_fields body', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ ticket: { id: 11, subject: 'New issue', status: 'open' } }))
+    await client(fetchImpl).updateTicket({ ticketId: 11, customFields: [{ id: 123, value: 'prod' }] })
+    const init = (fetchImpl.mock.calls[0] as [string, RequestInit])[1]
+    expect(JSON.parse(String(init.body))).toEqual({ ticket: { custom_fields: [{ id: 123, value: 'prod' }] } })
+  })
+
   it('requires explicit comment visibility for writes', async () => {
     const fetchImpl = vi.fn()
     const pd = client(fetchImpl)

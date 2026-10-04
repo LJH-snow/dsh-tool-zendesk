@@ -6,7 +6,7 @@
 |---|---|
 | 项目名 | `dsh-tool-zendesk` |
 | 定位 | DeepSeek Harness 的外部客服/ITSM 插件 |
-| 版本 | v0.1.0 |
+| 版本 | v0.2.0 |
 | 架构 | Cordis 插件 + `ctx.tools.register(defineTool(...))` |
 | API | Zendesk Support API v2 |
 | 认证 | OAuth Bearer 或 `email/token:<apiToken>` Basic |
@@ -36,6 +36,7 @@ examples/cordis.yml   dsh 组合配置示例
 
 - `createTicket`/`updateTicket` 必须显式传 `commentPublic`，否则抛 `ZendeskError`，杜绝隐式公开回复触发客户通知。
 - `updatedStamp` 传入时按 Zendesk `safe_update` 协议发送 `updated_stamp` 字段并追加 `safe_update=true` 查询参数，实现乐观并发控制；不发送只读的 `updated_at`。
+- `customFieldsJson`（v0.2.0）接受 `[{id, value}]` JSON 数组并映射为 Zendesk `custom_fields` 请求体；非法 JSON 返回 `{ ok: false }`，字段定义可先经 `zendesk_list_ticket_fields` 发现。
 - 不实现批量、删除、附件上传、宏、触发器。
 
 ### 2.4 PII 与不可信文本
@@ -61,10 +62,10 @@ npm test
 npm run build
 ```
 
-当前 10 个测试覆盖：Basic/OAuth 认证头、游标分页（含 next link 游标提取）、搜索与评论、创建/更新请求体与 safe_update 参数、显式 publicComment 约束、用户/组织/分组/字段映射、缺凭证保护、HTTP 错误映射。
+当前 11 个测试覆盖：Basic/OAuth 认证头、游标分页（含 next link 游标提取）、搜索与评论、创建/更新请求体与 safe_update 参数、custom_fields 请求体映射、显式 publicComment 约束、用户/组织/分组/字段映射、缺凭证保护、HTTP 错误映射。
 
 ## 4. 后续方向
 
 - 401 清除态重试与 429 Retry-After 处理。
-- 自定义字段写入（`custom_fields`）。
+- 创建工单时的自定义字段写入（当前仅更新路径支持）。
 - Ticket audit/只读宏浏览。

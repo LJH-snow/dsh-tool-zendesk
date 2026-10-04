@@ -36,7 +36,7 @@ npm install @libai168/dsh-tool-zendesk
 | `zendesk_get_ticket` | 查看单个工单，描述限长 | 否 |
 | `zendesk_list_ticket_comments` | 列出评论，正文限长 | 否 |
 | `zendesk_create_ticket` | 创建单个工单；必须显式传 `commentPublic` | 是 |
-| `zendesk_update_ticket` | 更新单个工单；评论必须显式 `commentPublic`；`updatedStamp` 启用 safe_update | 是 |
+| `zendesk_update_ticket` | 更新单个工单；评论必须显式 `commentPublic`；`customFieldsJson` 写入自定义字段；`updatedStamp` 启用 safe_update | 是 |
 | `zendesk_list_users` | 列出用户（默认不含邮箱） | 否 |
 | `zendesk_get_user` | 查看单个用户（默认不含邮箱） | 否 |
 | `zendesk_list_organizations` | 列出组织 | 否 |

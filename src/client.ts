@@ -254,9 +254,10 @@ export class ZendeskClient {
     return mapTicket(asRecord(raw).ticket)
   }
 
-  async updateTicket(options: { ticketId: number; status?: string; priority?: string; assigneeId?: number; groupId?: number; tags?: string[]; comment?: string; publicComment?: boolean; updatedStamp?: string; signal?: AbortSignal }): Promise<ZendeskTicketInfo> {
+  async updateTicket(options: { ticketId: number; status?: string; priority?: string; assigneeId?: number; groupId?: number; tags?: string[]; comment?: string; publicComment?: boolean; customFields?: Array<{ id: number; value: unknown }>; updatedStamp?: string; signal?: AbortSignal }): Promise<ZendeskTicketInfo> {
     const ticket: Record<string, unknown> = {}
     for (const [key, value] of Object.entries({ status: options.status, priority: options.priority, assignee_id: options.assigneeId, group_id: options.groupId, tags: options.tags })) if (value !== undefined) ticket[key] = value
+    if (options.customFields?.length) ticket.custom_fields = options.customFields
     if (options.comment !== undefined) {
       if (typeof options.publicComment !== 'boolean') throw new ZendeskError('publicComment must be explicitly set when adding a comment.', 400)
       ticket.comment = { body: options.comment, public: options.publicComment }

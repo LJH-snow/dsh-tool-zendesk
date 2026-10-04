@@ -28,6 +28,10 @@ function clip(value: string | undefined, limit: number): string {
   return (value ?? '').slice(0, limit)
 }
 
+function asRecordValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
+}
+
 function unavailable(reason: string) {
   return { found: false, items: [], reason }
 }
@@ -206,8 +210,8 @@ export function createTools(client: ZendeskClient) {
 
     defineTool({
       name: 'zendesk_update_ticket',
-      description: 'Update one Zendesk ticket. WRITE operation; comment visibility must be explicit; updatedStamp enables safe_update concurrency protection.',
-      parameters: { ticketId: { type: 'integer', required: true, description: 'Zendesk ticket ID' }, status: { type: 'string', description: 'New ticket status' }, priority: { type: 'string', description: 'New priority' }, assigneeId: { type: 'integer', description: 'Assignee user ID' }, groupId: { type: 'integer', description: 'Group ID' }, tags: { type: 'array', items: { type: 'string' }, description: 'Replacement ticket tags' }, comment: { type: 'string', description: 'Comment to append' }, commentPublic: { type: 'boolean', description: 'Required when comment is supplied; explicitly choose public or internal' }, updatedStamp: { type: 'string', description: 'Expected updated_stamp timestamp; enables safe_update' } },
+      description: 'Update one Zendesk ticket. WRITE operation; comment visibility must be explicit; customFieldsJson sets custom field values; updatedStamp enables safe_update.',
+      parameters: { ticketId: { type: 'integer', required: true, description: 'Zendesk ticket ID' }, status: { type: 'string', description: 'New ticket status' }, priority: { type: 'string', description: 'New priority' }, assigneeId: { type: 'integer', description: 'Assignee user ID' }, groupId: { type: 'integer', description: 'Group ID' }, tags: { type: 'array', items: { type: 'string' }, description: 'Replacement ticket tags' }, comment: { type: 'string', description: 'Comment to append' }, commentPublic: { type: 'boolean', description: 'Required when comment is supplied; explicitly choose public or internal' }, customFieldsJson: { type: 'string', description: 'JSON array of {id, value} custom field entries, e.g. [{"id":123,"value":"prod"}]' }, updatedStamp: { type: 'string', description: 'Expected updated_stamp timestamp; enables safe_update' } },
       output: {
         schema: { type: 'object', additionalProperties: false, properties: { ok: { type: 'boolean' }, reason: { type: 'string' }, id: { type: 'number' }, subject: { type: 'string' }, status: { type: 'string' }, priority: { type: 'string' }, url: { type: 'string' } } },
         render: (_args, value) => value.ok ? text(`Updated Zendesk ticket #${value.id ?? ''} ${value.subject ?? ''}\nstatus=${value.status ?? ''} priority=${value.priority ?? ''}\n${value.url ?? ''}`) : text(`Failed to update Zendesk ticket: ${value.reason ?? ''}`),
@@ -217,7 +221,17 @@ export function createTools(client: ZendeskClient) {
         if (!client.hasCredentials()) return { ok: false, reason: 'Zendesk subdomain and credentials are not configured.' }
         if (!args.ticketId) return { ok: false, reason: 'ticketId is required.' }
         if (args.comment !== undefined && typeof args.commentPublic !== 'boolean') return { ok: false, reason: 'commentPublic is required when comment is supplied.' }
-        try { const ticket = await client.updateTicket({ ticketId: args.ticketId as number, status: args.status as string, priority: args.priority as string, assigneeId: args.assigneeId as number, groupId: args.groupId as number, tags: (args.tags as string[] | undefined)?.map(tag => clip(tag, 80)), comment: args.comment === undefined ? undefined : clip(args.comment as string, 10000), publicComment: args.commentPublic as boolean, updatedStamp: args.updatedStamp as string, signal: exec.signal }); return { ok: true, id: ticket.id, subject: clip(ticket.subject, 200), status: ticket.status, priority: ticket.priority, url: ticket.url } } catch (error) { return { ok: false, reason: errorReason(error) } }
+        let customFields: Array<{ id: number; value: unknown }> | undefined
+        if (args.customFieldsJson) {
+          try {
+            const parsed = JSON.parse(args.customFieldsJson as string) as unknown
+            if (!Array.isArray(parsed)) return { ok: false, reason: 'customFieldsJson must be a JSON array of {id, value}.' }
+            customFields = parsed.map(entry => ({ id: Number(asRecordValue(entry).id), value: asRecordValue(entry).value }))
+          } catch {
+            return { ok: false, reason: 'customFieldsJson must be a JSON array of {id, value}.' }
+          }
+        }
+        try { const ticket = await client.updateTicket({ ticketId: args.ticketId as number, status: args.status as string, priority: args.priority as string, assigneeId: args.assigneeId as number, groupId: args.groupId as number, tags: (args.tags as string[] | undefined)?.map(tag => clip(tag, 80)), comment: args.comment === undefined ? undefined : clip(args.comment as string, 10000), publicComment: args.commentPublic as boolean, customFields, updatedStamp: args.updatedStamp as string, signal: exec.signal }); return { ok: true, id: ticket.id, subject: clip(ticket.subject, 200), status: ticket.status, priority: ticket.priority, url: ticket.url } } catch (error) { return { ok: false, reason: errorReason(error) } }
       },
     }),
 

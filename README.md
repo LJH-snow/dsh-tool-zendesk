@@ -36,7 +36,7 @@ Use OAuth bearer token (preferred) or email + API token Basic auth:
 | `zendesk_get_ticket` | Get one ticket with bounded description | No |
 | `zendesk_list_ticket_comments` | List comments with bounded bodies | No |
 | `zendesk_create_ticket` | Create one ticket; `commentPublic` is required | Yes |
-| `zendesk_update_ticket` | Update one ticket; comments require explicit `commentPublic`; `updatedStamp` enables safe_update | Yes |
+| `zendesk_update_ticket` | Update one ticket; comments require explicit `commentPublic`; `customFieldsJson` sets custom field values; `updatedStamp` enables safe_update | Yes |
 | `zendesk_list_users` | List users (no emails by default) | No |
 | `zendesk_get_user` | Get one user (no email by default) | No |
 | `zendesk_list_organizations` | List organizations | No |

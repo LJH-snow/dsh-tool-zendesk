@@ -1,0 +1,10 @@
+# Example dsh composition config for dsh-tool-zendesk.
+# Use either OAuth bearer token or email + API token Basic authentication.
+
+- name: 'github:LJH-snow/dsh-tool-zendesk'
+  config:
+    subdomain: 'example'
+    # oauthToken: 'eyJ...'
+    # email: 'agent@example.com'
+    # apiToken: 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+    # timeoutMs: 15000

@@ -1,0 +1,14 @@
+import type { Context } from '@deepseek-ai/cordis';
+import { ZendeskClient } from './client.js';
+export declare const name = "dsh-tool-zendesk";
+export declare const inject: string[];
+export interface ZendeskPluginConfig {
+    subdomain?: string;
+    baseUrl?: string;
+    oauthToken?: string;
+    email?: string;
+    apiToken?: string;
+    timeoutMs?: number;
+}
+export declare function apply(ctx: Context, config?: ZendeskPluginConfig): void;
+export declare function createTools(client: ZendeskClient): import("@deepseek-ai/dsh-tools").ToolDefinition[];

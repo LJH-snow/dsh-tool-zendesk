@@ -26,7 +26,7 @@ npm install @libai168/dsh-tool-zendesk
     # timeoutMs: 15000
 ```
 
-也可以用 `baseUrl` 代替 `subdomain` 指定兼容 Zendesk 的服务端点。它必须是带 hostname 的绝对 `http://` 或 `https://` URL，且不能包含用户名、密码、查询字符串或片段；允许并保留 path prefix（例如 `https://proxy.example.test/zendesk/`），末尾斜杠会被规范化。`baseUrl` 与 `subdomain` 都省略时，客户端仍保持未配置行为。
+也可以用 `baseUrl` 代替 `subdomain` 指定兼容 Zendesk 的服务端点。它必须是带 hostname 的绝对 `http://` 或 `https://` URL，且不能包含用户名、密码、查询字符串或片段；允许并保留 path prefix（例如 `https://proxy.example.test/zendesk/`），末尾斜杠会被规范化。默认的 `subdomain` 形式只接受一个 DNS label（字母、数字和中间连字符），不能包含路径、用户信息或额外 hostname 层级。`baseUrl` 与 `subdomain` 都省略时，客户端仍保持未配置行为。
 
 为防止 SSRF，每次 fetch 前都会校验最终请求 host。字面量 localhost、环回、私有、链路本地、共享地址/CGNAT、组播，以及全部 IANA 特殊用途地址段（保留、文档、基准测试、`2001::/23` IETF 协议分配段、已废弃的站点本地、SRv6 SID、AS112，以及 IPv4-mapped/NAT64 形式）都会被拒绝。普通域名必须成功解析，且 DNS 返回的每个地址都必须是允许的公共地址；解析失败、空结果或混合不安全结果都会 fail closed。
 

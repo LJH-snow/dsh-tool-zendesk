@@ -5,8 +5,10 @@ function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
 }
 
+const publicLookup = vi.fn(async () => [{ address: '93.184.216.34', family: 4 }])
+
 function client(fetchImpl: ReturnType<typeof vi.fn>) {
-  return new ZendeskClient({ subdomain: 'example', email: 'agent@example.com', apiToken: 'api-secret', fetchImpl })
+  return new ZendeskClient({ subdomain: 'example', email: 'agent@example.com', apiToken: 'api-secret', fetchImpl, lookupImpl: publicLookup })
 }
 
 describe('ZendeskClient', () => {
@@ -21,7 +23,7 @@ describe('ZendeskClient', () => {
 
   it('uses OAuth bearer auth and cursor pagination for tickets', async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({ tickets: [{ id: 10, subject: 'Broken login', status: 'open', priority: 'high', tags: ['login'] }], meta: { has_more: true, after_cursor: 'next-cursor', before_cursor: 'previous-cursor' } }))
-    const pd = new ZendeskClient({ subdomain: 'example', oauthToken: 'oauth-secret', fetchImpl })
+    const pd = new ZendeskClient({ subdomain: 'example', oauthToken: 'oauth-secret', fetchImpl, lookupImpl: publicLookup })
     const result = await pd.listTickets({ cursor: 'old-cursor', limit: 20, status: 'open' })
     expect(result).toMatchObject({ hasMore: true, nextCursor: 'next-cursor', previousCursor: 'previous-cursor' })
     expect(result.items[0]).toMatchObject({ id: 10, subject: 'Broken login', status: 'open', tags: ['login'] })
@@ -87,6 +89,102 @@ describe('ZendeskClient', () => {
     await expect(pd.createTicket({ subject: 'Issue', comment: 'Details' } as never)).rejects.toThrow('publicComment must be explicitly set')
     await expect(pd.updateTicket({ ticketId: 11, comment: 'Details' } as never)).rejects.toThrow('publicComment must be explicitly set')
     expect(fetchImpl).not.toHaveBeenCalled()
+  })
+
+  it('preserves a custom base URL path prefix and normalizes trailing slashes', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ user: { id: 1, name: 'Agent' } }))
+    const pd = new ZendeskClient({ baseUrl: 'https://support.example.test/help///', oauthToken: 'oauth-secret', fetchImpl, lookupImpl: publicLookup })
+    await pd.authTest()
+    expect((fetchImpl.mock.calls[0] as [string, RequestInit])[0]).toBe('https://support.example.test/help/api/v2/users/me.json')
+  })
+
+  it('rejects invalid base URLs without exposing their contents', () => {
+    for (const baseUrl of [
+      'support.example.test',
+      'ftp://support.example.test',
+      'https://agent:secret@support.example.test',
+      'https://support.example.test?token=secret',
+      'https://support.example.test#secret',
+    ]) {
+      expect(() => new ZendeskClient({ baseUrl, oauthToken: 'oauth-secret' })).toThrow(ZendeskError)
+      try { new ZendeskClient({ baseUrl, oauthToken: 'oauth-secret' }) } catch (error) {
+        expect(String(error)).not.toContain(baseUrl)
+        expect(String(error)).not.toContain('secret')
+      }
+    }
+  })
+
+  it('rejects literal localhost, loopback, private, and reserved addresses before fetch', async () => {
+    for (const baseUrl of [
+      'https://localhost',
+      'http://127.0.0.1',
+      'http://10.0.0.1',
+      'http://100.64.0.1',
+      'http://169.254.169.254',
+      'http://192.168.1.1',
+      'http://192.0.2.1',
+      'http://198.18.0.1',
+      'http://224.0.0.1',
+      'http://[::1]',
+      'http://[fc00::1]',
+      'http://[fe80::1]',
+      'http://[ff02::1]',
+      'http://[2001:db8::1]',
+      // IANA special-purpose blocks that previously slipped through.
+      'http://192.175.48.1',
+      'http://[fec0::1]',
+      'http://[2001:3::1]',
+      'http://[2001:4:112::1]',
+      'http://[2001:20::1]',
+      'http://[2001:30::1]',
+      'http://[5f00::1]',
+      'http://[100:0:0:1::1]',
+      'http://[2620:4f:8000::1]',
+    ]) {
+      const fetchImpl = vi.fn()
+      const pd = new ZendeskClient({ baseUrl, oauthToken: 'oauth-secret', fetchImpl, lookupImpl: publicLookup })
+      await expect(pd.authTest()).rejects.toMatchObject({ name: 'ZendeskError', code: 'unsafe_url' })
+      expect(fetchImpl).not.toHaveBeenCalled()
+    }
+  })
+
+  it('fails closed when DNS resolves to a blocked address or fails', async () => {
+    const fetchImpl = vi.fn()
+    const privateLookup = vi.fn(async () => [{ address: '192.168.10.10', family: 4 }])
+    const privateClient = new ZendeskClient({ baseUrl: 'https://tenant.example.test', oauthToken: 'oauth-secret', fetchImpl, lookupImpl: privateLookup })
+    await expect(privateClient.authTest()).rejects.toMatchObject({ name: 'ZendeskError', code: 'unsafe_url' })
+    expect(fetchImpl).not.toHaveBeenCalled()
+
+    const failingLookup = vi.fn(async () => { throw new Error('DNS unavailable') })
+    const failingClient = new ZendeskClient({ baseUrl: 'https://tenant.example.test', oauthToken: 'oauth-secret', fetchImpl, lookupImpl: failingLookup })
+    await expect(failingClient.authTest()).rejects.toMatchObject({ name: 'ZendeskError', code: 'unsafe_url' })
+    expect(fetchImpl).not.toHaveBeenCalled()
+  })
+
+  it('rejects a DNS result set containing any blocked address', async () => {
+    const fetchImpl = vi.fn()
+    const lookupImpl = vi.fn(async () => [
+      { address: '93.184.216.34', family: 4 },
+      { address: '10.0.0.7', family: 4 },
+    ])
+    const pd = new ZendeskClient({ baseUrl: 'https://tenant.example.test', oauthToken: 'oauth-secret', fetchImpl, lookupImpl })
+    await expect(pd.authTest()).rejects.toMatchObject({ name: 'ZendeskError', code: 'unsafe_url' })
+    expect(fetchImpl).not.toHaveBeenCalled()
+  })
+
+  it('fails closed for empty or inconsistent DNS results', async () => {
+    const fetchImpl = vi.fn()
+    for (const results of [
+      [],
+      [{ address: '93.184.216.34', family: 6 }],
+      [{ address: '2001:db8::1', family: 4 }],
+      [{ address: '93.184.216.34', family: 5 }],
+    ]) {
+      const lookupImpl = vi.fn(async () => results)
+      const pd = new ZendeskClient({ baseUrl: 'https://tenant.example.test', oauthToken: 'oauth-secret', fetchImpl, lookupImpl })
+      await expect(pd.authTest()).rejects.toMatchObject({ name: 'ZendeskError', code: 'unsafe_url' })
+      expect(fetchImpl).not.toHaveBeenCalled()
+    }
   })
 
   it('rejects missing credentials and maps API failures', async () => {

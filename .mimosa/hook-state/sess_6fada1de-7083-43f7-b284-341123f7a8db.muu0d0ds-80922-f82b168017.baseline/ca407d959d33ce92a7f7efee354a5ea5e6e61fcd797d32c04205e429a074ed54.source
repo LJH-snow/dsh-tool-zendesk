@@ -176,6 +176,8 @@ export class ZendeskClient {
         for (const [key, value] of Object.entries({ status: options.status, priority: options.priority, assignee_id: options.assigneeId, group_id: options.groupId, tags: options.tags }))
             if (value !== undefined)
                 ticket[key] = value;
+        if (options.customFields?.length)
+            ticket.custom_fields = options.customFields;
         if (options.comment !== undefined) {
             if (typeof options.publicComment !== 'boolean')
                 throw new ZendeskError('publicComment must be explicitly set when adding a comment.', 400);

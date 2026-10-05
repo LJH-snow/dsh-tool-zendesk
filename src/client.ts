@@ -1,5 +1,7 @@
 /** Zendesk Support API v2 client with OAuth or API-token authentication. */
 
+import { assertSafeUrl, normalizeBaseUrl, type LookupImpl } from './url-security.js'
+
 export interface ZendeskClientOptions {
   subdomain?: string
   baseUrl?: string
@@ -8,6 +10,8 @@ export interface ZendeskClientOptions {
   apiToken?: string
   timeoutMs?: number
   fetchImpl?: typeof fetch
+  /** Test-only DNS lookup override. */
+  lookupImpl?: LookupImpl
 }
 
 export class ZendeskError extends Error {
@@ -174,14 +178,20 @@ export class ZendeskClient {
   private readonly apiToken: string
   private readonly timeoutMs: number
   private readonly fetchImpl: typeof fetch
+  private readonly lookupImpl?: LookupImpl
 
   constructor(options: ZendeskClientOptions = {}) {
-    this.baseUrl = (options.baseUrl ?? (options.subdomain ? `https://${options.subdomain}.zendesk.com` : '')).replace(/\/+$/, '')
+    try {
+      this.baseUrl = normalizeBaseUrl(options.baseUrl, options.subdomain)
+    } catch {
+      throw new ZendeskError('Zendesk base URL is invalid.', 400, 'invalid_base_url')
+    }
     this.oauthToken = options.oauthToken ?? ''
     this.email = options.email ?? ''
     this.apiToken = options.apiToken ?? ''
     this.timeoutMs = options.timeoutMs ?? 15000
     this.fetchImpl = options.fetchImpl ?? globalThis.fetch
+    this.lookupImpl = options.lookupImpl
   }
 
   hasCredentials(): boolean {
@@ -190,7 +200,12 @@ export class ZendeskClient {
 
   private async request<T = unknown>(method: string, path: string, options: { params?: Record<string, unknown>; body?: unknown; signal?: AbortSignal } = {}): Promise<T> {
     if (!this.hasCredentials()) throw new ZendeskError('Zendesk subdomain and credentials are not configured.', 401)
-    const url = new URL(`${this.baseUrl}${path}`)
+    let url: URL
+    try {
+      url = new URL(`${this.baseUrl}${path}`)
+    } catch {
+      throw new ZendeskError('Zendesk request URL is invalid.', 400, 'unsafe_url')
+    }
     if (options.params) {
       const search = new URLSearchParams()
       for (const [key, value] of Object.entries(options.params)) {
@@ -206,6 +221,11 @@ export class ZendeskClient {
     const combined = options.signal ? AbortSignal.any([options.signal, controller.signal]) : controller.signal
     const timer = this.timeoutMs > 0 ? setTimeout(() => controller.abort(), this.timeoutMs) : undefined
     try {
+      try {
+        await assertSafeUrl(url, this.lookupImpl)
+      } catch {
+        throw new ZendeskError('Zendesk request URL host is not allowed.', 400, 'unsafe_url')
+      }
       const response = await this.fetchImpl(url.toString(), { method, headers, body: options.body === undefined ? undefined : JSON.stringify(options.body), signal: combined })
       const raw = await response.text()
       let body: unknown = {}

@@ -130,6 +130,10 @@ export declare class ZendeskClient {
         tags?: string[];
         comment?: string;
         publicComment?: boolean;
+        customFields?: Array<{
+            id: number;
+            value: unknown;
+        }>;
         updatedStamp?: string;
         signal?: AbortSignal;
     }): Promise<ZendeskTicketInfo>;

@@ -26,6 +26,10 @@ Use OAuth bearer token (preferred) or email + API token Basic auth:
     # timeoutMs: 15000
 ```
 
+`baseUrl` may be used instead of `subdomain` for a Zendesk-compatible endpoint. It must be an absolute `http://` or `https://` URL with a hostname and no username, password, query string, or fragment. A path prefix is allowed and is retained for API requests (for example, `https://proxy.example.test/zendesk/`). The trailing slash is normalized. When `baseUrl` and `subdomain` are both omitted, the client remains unconfigured.
+
+For SSRF protection, the final request host is checked immediately before every fetch. Literal localhost, loopback, private, link-local, shared/CGNAT, multicast, and every IANA special-purpose block (reserved, documentation, benchmarking, the `2001::/23` IETF protocol assignments prefix, deprecated site-local, SRv6 SIDs, AS112, and IPv4-mapped/NAT64 forms) are rejected. Domain names must resolve successfully, and every DNS result must be a permitted public address; DNS failures and empty or mixed unsafe results fail closed.
+
 ## Tools
 
 | Tool | Description | Write |

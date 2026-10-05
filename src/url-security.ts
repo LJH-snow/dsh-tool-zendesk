@@ -123,6 +123,12 @@ export function isBlockedAddress(address: string): boolean {
 }
 
 export function normalizeBaseUrl(baseUrl: string | undefined, subdomain: string | undefined): string {
+  if (baseUrl === undefined && subdomain) {
+    if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i.test(subdomain)) {
+      throw new Error('Zendesk base URL is invalid.')
+    }
+  }
+
   const configured = baseUrl ?? (subdomain ? `https://${subdomain}.zendesk.com` : '')
   if (!configured) return ''
   let url: URL

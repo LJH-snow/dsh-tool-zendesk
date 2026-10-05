@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { describe, expect, it, vi } from 'vitest'
 import { ZendeskClient, ZendeskError } from '../src/client.ts'
 
@@ -6,9 +7,12 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 const publicLookup = vi.fn(async () => [{ address: '93.184.216.34', family: 4 }])
+const testApiToken = randomUUID()
+const testOauthToken = randomUUID()
+const invalidMarker = randomUUID()
 
 function client(fetchImpl: ReturnType<typeof vi.fn>) {
-  return new ZendeskClient({ subdomain: 'example', email: 'agent@example.com', apiToken: 'api-secret', fetchImpl, lookupImpl: publicLookup })
+  return new ZendeskClient({ subdomain: 'example', email: 'agent@example.com', apiToken: testApiToken, fetchImpl, lookupImpl: publicLookup })
 }
 
 describe('ZendeskClient', () => {
@@ -18,12 +22,12 @@ describe('ZendeskClient', () => {
     expect(result).toMatchObject({ id: 1, name: 'Agent', role: 'agent', active: true })
     const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit]
     expect(url).toBe('https://example.zendesk.com/api/v2/users/me.json')
-    expect((init.headers as Record<string, string>).authorization).toBe(`Basic ${Buffer.from('agent@example.com/token:api-secret').toString('base64')}`)
+    expect((init.headers as Record<string, string>).authorization).toBe(`Basic ${Buffer.from(`agent@example.com/token:${testApiToken}`).toString('base64')}`)
   })
 
   it('uses OAuth bearer auth and cursor pagination for tickets', async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({ tickets: [{ id: 10, subject: 'Broken login', status: 'open', priority: 'high', tags: ['login'] }], meta: { has_more: true, after_cursor: 'next-cursor', before_cursor: 'previous-cursor' } }))
-    const pd = new ZendeskClient({ subdomain: 'example', oauthToken: 'oauth-secret', fetchImpl, lookupImpl: publicLookup })
+    const pd = new ZendeskClient({ subdomain: 'example', oauthToken: testOauthToken, fetchImpl, lookupImpl: publicLookup })
     const result = await pd.listTickets({ cursor: 'old-cursor', limit: 20, status: 'open' })
     expect(result).toMatchObject({ hasMore: true, nextCursor: 'next-cursor', previousCursor: 'previous-cursor' })
     expect(result.items[0]).toMatchObject({ id: 10, subject: 'Broken login', status: 'open', tags: ['login'] })
@@ -31,7 +35,7 @@ describe('ZendeskClient', () => {
     expect(url).toContain('page%5Bafter%5D=old-cursor')
     expect(url).toContain('page%5Bsize%5D=20')
     expect(url).toContain('status=open')
-    expect((init.headers as Record<string, string>).authorization).toBe('Bearer oauth-secret')
+    expect((init.headers as Record<string, string>).authorization).toBe(`Bearer ${testOauthToken}`)
   })
 
   it('searches and gets ticket comments', async () => {
@@ -93,7 +97,7 @@ describe('ZendeskClient', () => {
 
   it('preserves a custom base URL path prefix and normalizes trailing slashes', async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({ user: { id: 1, name: 'Agent' } }))
-    const pd = new ZendeskClient({ baseUrl: 'https://support.example.test/help///', oauthToken: 'oauth-secret', fetchImpl, lookupImpl: publicLookup })
+    const pd = new ZendeskClient({ baseUrl: 'https://support.example.test/help///', oauthToken: testOauthToken, fetchImpl, lookupImpl: publicLookup })
     await pd.authTest()
     expect((fetchImpl.mock.calls[0] as [string, RequestInit])[0]).toBe('https://support.example.test/help/api/v2/users/me.json')
   })
@@ -102,14 +106,14 @@ describe('ZendeskClient', () => {
     for (const baseUrl of [
       'support.example.test',
       'ftp://support.example.test',
-      'https://agent:secret@support.example.test',
-      'https://support.example.test?token=secret',
-      'https://support.example.test#secret',
+      `https://agent:${invalidMarker}@support.example.test`,
+      `https://support.example.test?token=${invalidMarker}`,
+      `https://support.example.test#${invalidMarker}`,
     ]) {
-      expect(() => new ZendeskClient({ baseUrl, oauthToken: 'oauth-secret' })).toThrow(ZendeskError)
-      try { new ZendeskClient({ baseUrl, oauthToken: 'oauth-secret' }) } catch (error) {
+      expect(() => new ZendeskClient({ baseUrl, oauthToken: testOauthToken })).toThrow(ZendeskError)
+      try { new ZendeskClient({ baseUrl, oauthToken: testOauthToken }) } catch (error) {
         expect(String(error)).not.toContain(baseUrl)
-        expect(String(error)).not.toContain('secret')
+        expect(String(error)).not.toContain(invalidMarker)
       }
     }
   })
@@ -142,7 +146,7 @@ describe('ZendeskClient', () => {
       'http://[2620:4f:8000::1]',
     ]) {
       const fetchImpl = vi.fn()
-      const pd = new ZendeskClient({ baseUrl, oauthToken: 'oauth-secret', fetchImpl, lookupImpl: publicLookup })
+      const pd = new ZendeskClient({ baseUrl, oauthToken: testOauthToken, fetchImpl, lookupImpl: publicLookup })
       await expect(pd.authTest()).rejects.toMatchObject({ name: 'ZendeskError', code: 'unsafe_url' })
       expect(fetchImpl).not.toHaveBeenCalled()
     }
@@ -151,12 +155,12 @@ describe('ZendeskClient', () => {
   it('fails closed when DNS resolves to a blocked address or fails', async () => {
     const fetchImpl = vi.fn()
     const privateLookup = vi.fn(async () => [{ address: '192.168.10.10', family: 4 }])
-    const privateClient = new ZendeskClient({ baseUrl: 'https://tenant.example.test', oauthToken: 'oauth-secret', fetchImpl, lookupImpl: privateLookup })
+    const privateClient = new ZendeskClient({ baseUrl: 'https://tenant.example.test', oauthToken: testOauthToken, fetchImpl, lookupImpl: privateLookup })
     await expect(privateClient.authTest()).rejects.toMatchObject({ name: 'ZendeskError', code: 'unsafe_url' })
     expect(fetchImpl).not.toHaveBeenCalled()
 
     const failingLookup = vi.fn(async () => { throw new Error('DNS unavailable') })
-    const failingClient = new ZendeskClient({ baseUrl: 'https://tenant.example.test', oauthToken: 'oauth-secret', fetchImpl, lookupImpl: failingLookup })
+    const failingClient = new ZendeskClient({ baseUrl: 'https://tenant.example.test', oauthToken: testOauthToken, fetchImpl, lookupImpl: failingLookup })
     await expect(failingClient.authTest()).rejects.toMatchObject({ name: 'ZendeskError', code: 'unsafe_url' })
     expect(fetchImpl).not.toHaveBeenCalled()
   })
@@ -167,7 +171,7 @@ describe('ZendeskClient', () => {
       { address: '93.184.216.34', family: 4 },
       { address: '10.0.0.7', family: 4 },
     ])
-    const pd = new ZendeskClient({ baseUrl: 'https://tenant.example.test', oauthToken: 'oauth-secret', fetchImpl, lookupImpl })
+    const pd = new ZendeskClient({ baseUrl: 'https://tenant.example.test', oauthToken: testOauthToken, fetchImpl, lookupImpl })
     await expect(pd.authTest()).rejects.toMatchObject({ name: 'ZendeskError', code: 'unsafe_url' })
     expect(fetchImpl).not.toHaveBeenCalled()
   })
@@ -181,7 +185,7 @@ describe('ZendeskClient', () => {
       [{ address: '93.184.216.34', family: 5 }],
     ]) {
       const lookupImpl = vi.fn(async () => results)
-      const pd = new ZendeskClient({ baseUrl: 'https://tenant.example.test', oauthToken: 'oauth-secret', fetchImpl, lookupImpl })
+      const pd = new ZendeskClient({ baseUrl: 'https://tenant.example.test', oauthToken: testOauthToken, fetchImpl, lookupImpl })
       await expect(pd.authTest()).rejects.toMatchObject({ name: 'ZendeskError', code: 'unsafe_url' })
       expect(fetchImpl).not.toHaveBeenCalled()
     }

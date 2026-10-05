@@ -6,7 +6,7 @@
 |---|---|
 | 项目名 | `dsh-tool-zendesk` |
 | 定位 | DeepSeek Harness 的外部客服/ITSM 插件 |
-| 版本 | v0.3.0 |
+| 版本 | v0.3.1 |
 | 架构 | Cordis 插件 + `ctx.tools.register(defineTool(...))` |
 | API | Zendesk Support API v2 |
 | 认证 | OAuth Bearer 或 `email/token:<apiToken>` Basic |
@@ -48,7 +48,7 @@ examples/cordis.yml   dsh 组合配置示例
 
 ### 2.5 URL 安全
 
-- `baseUrl` 仅接受带 hostname 的绝对 `http://`/`https://` URL，拒绝 username、password、query 和 fragment；path prefix 会保留，末尾斜杠会规范化。`baseUrl` 与 `subdomain` 都缺省时保留空配置行为。
+- `baseUrl` 仅接受带 hostname 的绝对 `http://`/`https://` URL，拒绝 username、password、query 和 fragment；path prefix 会保留，末尾斜杠会规范化。未提供 `baseUrl` 时，`subdomain` 只接受一个 DNS label（字母、数字和中间连字符），防止配置值改变实际 hostname；两者都缺省时保留空配置行为。
 - 请求在真正调用 `fetch` 前校验最终 URL。字面量 localhost、环回、私有、链路本地、CGNAT、组播、保留、文档和基准测试 IPv4/IPv6 地址均拒绝。
 - 阻断清单与 IANA IPv4/IPv6 Special-Purpose Address Registry 对齐，额外覆盖 `2001::/23`（IETF Protocol Assignments，含 Teredo、AMT、AS112-v6、ORCHID/ORCHIDv2、DRiP）、`5f00::/16`（SRv6 SID）、`100:0:0:1::/64`（RFC 9780）、`2620:4f:8000::/48`、`fec0::/10`（已废弃站点本地）及 IPv4-mapped/NAT64 形式；该清单需与 aws/dockerhub/pagerduty 三个同源插件保持一致，不得只改其中一份。
 - 普通 hostname 使用 `dns.promises.lookup(hostname, { all: true })`，解析失败、空结果或任一解析结果属于阻断地址时 fail closed。`lookupImpl` 仅作为 `ZendeskClientOptions` 的测试注入点，插件配置接口不暴露它。
